@@ -1,2 +1,3 @@
 bot_credentials.ini
 __pycache__
+*.p
