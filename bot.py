@@ -86,7 +86,10 @@ permalinks_set = set([post[-1] for post in yt_posts])
 
 print('Database has {0} posts total. Range from {1} to {2}'.format(len(yt_posts), get_date_str(start_end_timestamps[0]), get_date_str(start_end_timestamps[1])))
 
-
+"""if you don't need to post or comment on reddit, just fetch subreddit submissions
+comment login and uncomment this.
+r = praw.Reddit("User-Agent: your_OS:bot_name:v0.1 (by/u/your_name)")
+"""
 print('Logging in..')
 r = login(credentials_filename)
 print('Log in as', r.get_me().name, 'successfull!\n')
