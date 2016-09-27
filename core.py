@@ -1,6 +1,7 @@
 import time
 import re
-from datetime import datetime, timezone
+from datetime import datetime
+import pytz
 import csv
 import math
 
@@ -11,8 +12,8 @@ search_query = 'timestamp:{0}..{1}'
 timestamp_date_format = '%d/%m/%Y %H:%M:%S'
 
 def get_posts_between(r, subreddit_name, start, end):
-    interaval_tuple = (start, end)
-    search_results = r.search(search_query.format(*interaval_tuple), subreddit=subreddit_name, sort='new', syntax='cloudsearch')
+    print(start, end)
+    search_results = r.search(search_query.format(start, end), subreddit=subreddit_name, sort='new', syntax='cloudsearch')
     return search_results
 
 #http://stackoverflow.com/questions/19377262/regex-for-youtube-url
@@ -27,9 +28,9 @@ def get_now_plus_day():
 
 def get_date_str(timestamp, is_utc_needed):
     if is_utc_needed:
-        return datetime.fromtimestamp(timestamp).replace(tzinfo=timezone.utc).strftime(timestamp_date_format) + ' UTC'
+        return datetime.utcfromtimestamp(timestamp).replace(tzinfo=pytz.utc).strftime(timestamp_date_format) + ' UTC'
     else:
-        return datetime.fromtimestamp(timestamp).strftime(timestamp_date_format) + ' L_TZ'
+        return datetime.utcfromtimestamp(timestamp).strftime(timestamp_date_format) + ' L_TZ'
 
 def print_post(post):
     print('Title:', post[0])
@@ -39,14 +40,15 @@ def print_post(post):
     print('Downs:', post[4])
     print('Author username:', post[5])
     print('Date UTC:', get_date_str(post[6], True))
-    for i, link in enumerate(post[7]):
+    print('Text content:', post[7])
+    for i, link in enumerate(post[8]):
         print('Link', str(i + 1) + ':', link)
     print('Permaink:', post[-1])
 
 def clear_str(s):
     r = ''
     for ss in s:
-        if ss.isalnum():
+        if ss.isalnum() or ss in '[]_,.;+=/*-+)(*&^%$#@!~`{}""':
             r += ss
         else:
             r += ' '
@@ -58,16 +60,17 @@ def get_archive_name(subreddit_name):
 def save_posts_to_csv(yt_posts, subreddit_name, start_timestamp):
     latest_timestamp = 0
     with open(get_archive_name(subreddit_name), 'w', newline='') as csvfile:
-        rowwriter = csv.writer(csvfile, delimiter='\t', quotechar='\t', quoting=csv.QUOTE_MINIMAL)
-        rowwriter.writerow(['Title', 'Name', 'Score', 'Ups', 'Downs', 'Username', 'Date', 'Links', 'Permalink'])
+        rowwriter = csv.writer(csvfile, delimiter='\t', quotechar='\t', quoting=csv.QUOTE_NONE)
+        rowwriter.writerow(['Title', 'Name', 'Score', 'Ups', 'Downs', 'Username', 'Date', 'Plain text', 'Links', 'Permalink'])
         for post in yt_posts:
             row = list(post)
-            row[7] = ','.join(post[7])
+            row[8] = ','.join(post[8])
             row[0] = clear_str(post[0])
+            row[7] = clear_str(post[7])
             if row[6] > latest_timestamp:
                 latest_timestamp = row[6]
             rowwriter.writerow(row)
-        csvfile.write(str(start_timestamp) + '_' + str(latest_timestamp) + '\n')
+        csvfile.write(str(start_timestamp) + '_' + str(latest_timestamp) + '\r\n')
         csvfile.write(str(int(time.time())))
 
 def load_posts_from_csv(subreddit_name):
@@ -77,14 +80,14 @@ def load_posts_from_csv(subreddit_name):
     filename = get_archive_name(subreddit_name)
     try:
         with open(filename, 'r', newline='') as csvfile:
-            rowreader = csv.reader(csvfile, delimiter='\t', quotechar='\t', quoting=csv.QUOTE_MINIMAL)
+            rowreader = csv.reader(csvfile, delimiter='\t', quotechar='\t', quoting=csv.QUOTE_NONE)
             rowreader.__next__()#skip column names
             for row in rowreader:
                 if len(row) > 1:
                     post = list(row)
                     for ii in [2, 3, 4, 6]:
                         post[ii] = int(row[ii])
-                    post[7] = post[7].split(',')
+                    post[8] = post[8].split(',')
                     posts.append(post)
                 else:
                     start_end_timestamps = [int(s) for s in row[0].split('_')]
@@ -110,7 +113,7 @@ def get_yt_posts_and_permalinks_set_between(r, subreddit_name, already_archived_
         if permalink not in already_archived_permalinks_set and permalink not in new_permalinks_set:
             yt_links = get_yt_links(post)
             if len(yt_links) > 0:
-                new_yt_posts.append((post.title, post.name, post.ups - post.downs, post.ups, post.downs, post.author.name, int(post.created_utc), yt_links, permalink))
+                new_yt_posts.append((post.title, post.name, post.ups - post.downs, post.ups, post.downs, post.author.name, int(post.created_utc), post.selftext, yt_links, permalink))
                 new_permalinks_set.add(permalink)
 
     return new_yt_posts, new_permalinks_set
@@ -128,7 +131,7 @@ def update_subreddit_archive(r, subreddit_name):
         start_timestamp = input('\nPlease enter date from which to start gathering posts. Format ' + timestamp_date_format +
                 '\nExample: ' + get_date_str(time.time(), False) + '\n')
 
-        start_end_timestamps[0] = datetime.strptime(start_timestamp, timestamp_date_format).replace(tzinfo=timezone.utc).timestamp()
+        start_end_timestamps[0] = datetime.strptime(start_timestamp, timestamp_date_format).replace(tzinfo=pytz.utc).timestamp()
     else:
         #start_end_timestamps[0] = max(start_end_timestamps[1] - search_granularity_interval, start_end_timestamps[0])
         start_end_timestamps[0] = max(last_update_timestamp - search_granularity_interval, start_end_timestamps[0])

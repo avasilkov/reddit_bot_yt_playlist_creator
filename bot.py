@@ -11,6 +11,7 @@ if LOGIN:
 else:
     #if you don't need to post or comment on reddit, just fetch subreddit submissions
     print('Accessing Reddit without login')
+    import praw
     r = praw.Reddit("User-Agent: your_OS:bot_name:v0.1 (by/u/your_name)")
 
 
