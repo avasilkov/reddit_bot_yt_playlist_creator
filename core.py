@@ -1,18 +1,17 @@
 import time
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 import pytz
 import csv
 import math
 
 archives_folder = 'archives/'
 day_in_seconds = 24*60*60
-search_granularity_interval = day_in_seconds
+utc_offset = 8*60*60
 search_query = 'timestamp:{0}..{1}'
 timestamp_date_format = '%d/%m/%Y %H:%M:%S'
 
 def get_posts_between(r, subreddit_name, start, end):
-    print(start, end)
     search_results = r.search(search_query.format(start, end), subreddit=subreddit_name, sort='new', syntax='cloudsearch')
     return search_results
 
@@ -23,8 +22,8 @@ def get_yt_links(post):
         return [post.url]
     return list(set([''.join(m) for m in re.findall(yt_link_pattern, post.selftext_html)]))
 
-def get_now_plus_day():
-    return int(time.time()) + day_in_seconds
+def get_now_plus_utc_offset():
+    return int(time.time()) + utc_offset
 
 def get_date_str(timestamp, is_utc_needed):
     if is_utc_needed:
@@ -104,7 +103,7 @@ def load_posts_from_csv(subreddit_name):
     return posts, start_end_timestamps, last_update_timestamp
 
 def get_yt_posts_and_permalinks_set_between(r, subreddit_name, already_archived_permalinks_set, start_timestamp, end_timestamp):
-    posts = list(get_posts_between(r, subreddit_name, start_timestamp, end_timestamp))
+    posts = get_posts_between(r, subreddit_name, start_timestamp, end_timestamp)#generator
 
     new_yt_posts = []
     new_permalinks_set = set()
@@ -118,7 +117,7 @@ def get_yt_posts_and_permalinks_set_between(r, subreddit_name, already_archived_
 
     return new_yt_posts, new_permalinks_set
 
-def update_subreddit_archive(r, subreddit_name):
+def update_subreddit_archive(r, subreddit_name, search_granularity_interval=day_in_seconds, repeat_search_times=3):
 
     yt_posts, start_end_timestamps, last_update_timestamp = load_posts_from_csv(subreddit_name)
 
@@ -136,20 +135,43 @@ def update_subreddit_archive(r, subreddit_name):
         #start_end_timestamps[0] = max(start_end_timestamps[1] - search_granularity_interval, start_end_timestamps[0])
         start_end_timestamps[0] = max(last_update_timestamp - search_granularity_interval, start_end_timestamps[0])
 
-    start_end_timestamps[1] = get_now_plus_day()
+    start_end_timestamps[1] = get_now_plus_utc_offset()
     start_end_timestamps[0] = int(start_end_timestamps[0])
 
     #start_end_timestamps[1] = int(math.ceil((start_end_timestamps[1] - start_end_timestamps[0])/search_granularity_interval)*search_granularity_interval) + start_end_timestamps[0]
-    print('Current search granularity interval', search_granularity_interval)
+    print('Current search granularity interval is', str(timedelta(seconds=search_granularity_interval)))
+    print()
     print(int(math.ceil((start_end_timestamps[1] - start_end_timestamps[0])/search_granularity_interval)), 'intervals to search')
     for current_search_timestamp_step in range(start_end_timestamps[0], start_end_timestamps[1], search_granularity_interval):
         start = current_search_timestamp_step
         end = current_search_timestamp_step + search_granularity_interval
         print('Getting posts between', get_date_str(start, True), 'and', get_date_str(end, True))
+        got_posts = 0
+        for i in range(repeat_search_times):
+            new_yt_posts, new_permalinks_set = get_yt_posts_and_permalinks_set_between(r, subreddit_name, permalinks_set, start, end)
+            got_posts += len(new_yt_posts)
+            yt_posts.extend(new_yt_posts)
+            permalinks_set.update(new_permalinks_set)
+            end += 1#to prevent praw from caching
+        print('Got', got_posts, 'new posts containing youtube links')
+
+    """
+    gets random results each time
+    counts = []
+    start = 1474761600
+    end = 1474848000
+    for i in range(30):
+        end += 1
+        print('Getting posts between', get_date_str(start, True), 'and', get_date_str(end, True))
         new_yt_posts, new_permalinks_set = get_yt_posts_and_permalinks_set_between(r, subreddit_name, permalinks_set, start, end)
+        counts.append(len(new_yt_posts))
         print('Got', len(new_yt_posts), 'new posts containing youtube links')
-        yt_posts.extend(new_yt_posts)
-        permalinks_set.update(new_permalinks_set)
+
+    print(len(counts))
+    print(counts)
+    print('14', len([c for c in counts if c == 14]))
+    print('15', len([c for c in counts if c == 15]))
+    """
 
 
     save_posts_to_csv(yt_posts, subreddit_name, start_end_timestamps[0])
