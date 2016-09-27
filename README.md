@@ -1,5 +1,5 @@
 # Reddit bot yt playlists creator W.I.P
-Reddit bot, that finds all youtube video links in a subreddit and creates a youtube playlists. Has oauth implemented as well.
+Reddit bot(requires [PRAW](https://github.com/praw-dev/praw), tested on Python3.5), that finds all youtube video links in a subreddit and creates a youtube playlists. Has oauth implemented as well.
 
 Here's example of bot_credentials.ini for oauth if you need to post or reply on reddit:
 
